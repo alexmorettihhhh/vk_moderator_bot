@@ -90,6 +90,13 @@ def init_db():
                      invited_count INTEGER DEFAULT 0,
                      last_activity TIMESTAMP)''')
 
+        c.execute('''CREATE TABLE IF NOT EXISTS marriages
+                    (user_id INTEGER PRIMARY KEY,
+                     partner_id INTEGER,
+                     marriage_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                     FOREIGN KEY (user_id) REFERENCES users(user_id),
+                     FOREIGN KEY (partner_id) REFERENCES users(user_id))''')
+
         c.execute('''CREATE TABLE IF NOT EXISTS bans
                     (user_id INTEGER,
                      chat_id INTEGER,
