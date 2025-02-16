@@ -51,6 +51,15 @@ def cmd_unban(vk, event, args):
         conn = sqlite3.connect('bot.db')
         c = conn.cursor()
         
+        # Проверяем, забанен ли пользователь
+        c.execute('SELECT ban_time FROM bans WHERE user_id = ? AND chat_id = ?', (user_id, chat_id))
+        ban = c.fetchone()
+        
+        if not ban:
+            conn.close()
+            user_info = vk.users.get(user_ids=[user_id])[0]
+            return f"⚠️ Пользователь @id{user_id} ({user_info['first_name']}) не находится в бане"
+        
         c.execute('''DELETE FROM bans 
                     WHERE user_id = ? AND chat_id = ?''', (user_id, chat_id))
         
@@ -121,14 +130,7 @@ def cmd_zov(vk, event):
         for member in chat_members['profiles']:
             mentions.append(f"@id{member['id']} ({member['first_name']})")
         
-        message = "🔔 Всеобщий призыв!\n" + ", ".join(mentions)
-        
-        vk.messages.send(
-            chat_id=event.chat_id,
-            message=message,
-            random_id=get_random_id()
-        )
-        return None
+        return "🔔 Всеобщий призыв!\n" + ", ".join(mentions)
     except Exception as e:
         return f"❌ Ошибка: {str(e)}"
 
@@ -146,14 +148,7 @@ def cmd_online(vk, event):
         if not online_members:
             return "😴 Сейчас никого нет онлайн"
         
-        message = "🟢 Сейчас онлайн:\n" + ", ".join(online_members)
-        
-        vk.messages.send(
-            chat_id=event.chat_id,
-            message=message,
-            random_id=get_random_id()
-        )
-        return None
+        return "🟢 Сейчас онлайн:\n" + ", ".join(online_members)
     except Exception as e:
         return f"❌ Ошибка: {str(e)}"
 

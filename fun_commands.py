@@ -63,6 +63,137 @@ def cmd_profile(vk, event, args):
     except Exception as e:
         return f"❌ Ошибка: {str(e)}"
 
+
+def cmd_give(vk, event, args):
+    """Передача монет другому пользователю"""
+    if len(args) < 2:
+        return "⚠️ Использование: /give [ID] [количество]"
+    
+    try:
+        target = args[0]
+        amount = int(args[1])
+        from_id = event.obj.message['from_id']
+        
+        if amount < 1:
+            return "⚠️ Минимальная сумма для передачи: 1 монета"
+        
+        # Извлекаем ID пользователя
+        to_id = extract_user_id(vk, target)
+        if not to_id:
+            return "❌ Не удалось определить пользователя"
+        
+        if from_id == to_id:
+            return "❌ Вы не можете передать монеты самому себе"
+        
+        conn = sqlite3.connect('bot.db')
+        c = conn.cursor()
+        
+        # Проверяем баланс отправителя
+        c.execute('SELECT balance FROM users WHERE user_id = ?', (from_id,))
+        sender_balance = c.fetchone()
+        
+        if not sender_balance or sender_balance[0] < amount:
+            return "❌ Недостаточно монет для передачи"
+        
+        # Переводим монеты
+        c.execute('UPDATE users SET balance = balance - ? WHERE user_id = ?', (amount, from_id))
+        c.execute('UPDATE users SET balance = balance + ? WHERE user_id = ?', (amount, to_id))
+        
+        conn.commit()
+        conn.close()
+        
+        user_info = vk.users.get(user_ids=[to_id])[0]
+        return f"💰 Вы успешно передали {amount} монет пользователю @id{to_id} ({user_info['first_name']})"
+    except Exception as e:
+        return f"❌ Ошибка: {str(e)}"
+    
+def cmd_nickname(vk, event, args):
+    """Установка или изменение ника пользователя"""
+    if not args:
+        return "⚠️ Укажите ник"
+    
+    try:
+        user_id = event.obj.message['from_id']
+        nickname = ' '.join(args)
+        
+        if len(nickname) > 20:
+            return "⚠️ Максимальная длина ника: 20 символов"
+        
+        conn = sqlite3.connect('bot.db')
+        c = conn.cursor()
+        
+        # Обновляем ник
+        c.execute('UPDATE users SET nickname = ? WHERE user_id = ?', (nickname, user_id))
+        
+        conn.commit()
+        conn.close()
+        
+        return f"🏷 Ваш ник успешно изменен на: {nickname}"
+    except Exception as e:
+        return f"❌ Ошибка: {str(e)}"
+    
+
+
+def cmd_achievements(vk, event):
+    """Просмотр достижений пользователя"""
+    try:
+        user_id = event.obj.message['from_id']
+        
+        conn = sqlite3.connect('bot.db', detect_types=sqlite3.PARSE_DECLTYPES)
+        c = conn.cursor()
+        
+        # Получаем достижения
+        c.execute('''SELECT a.achievement_type, a.achievement_date, at.description 
+                    FROM achievements a
+                    JOIN achievement_types at ON a.achievement_type = at.type
+                    WHERE a.user_id = ?
+                    ORDER BY a.achievement_date DESC''', (user_id,))
+        achievements = c.fetchall()
+        
+        if not achievements:
+            return "🏆 У вас пока нет достижений"
+        
+        message = "🏆 Ваши достижения:\n\n"
+        for achievement_type, achievement_date, description in achievements:
+            formatted_date = achievement_date.strftime('%d.%m.%Y')
+            message += f"• {achievement_type} - {description}\n  Получено: {formatted_date}\n"
+        
+        # Получаем прогресс для незаработанных достижений
+        c.execute('''SELECT total_winnings, games_won, games_lost, 
+                     jackpot_wins, poker_wins, biggest_win,
+                     (SELECT COUNT(*) FROM tournament_history 
+                      WHERE user_id = ? AND place = 1) as tournament_wins
+                     FROM users WHERE user_id = ?''', (user_id, user_id))
+        stats = c.fetchone()
+        
+        if stats:
+            total_winnings, games_won, games_lost, jackpot_wins, poker_wins, biggest_win, tournament_wins = stats
+            
+            # Проверяем прогресс для каждого недостигнутого достижения
+            message += "\n📊 Прогресс достижений:\n"
+            earned_types = {ach[0] for ach in achievements}
+            
+            progress = [
+                ('🎰 Миллионер', total_winnings, 1000000, 'монет накоплено'),
+                ('💎 Крупный выигрыш', biggest_win, 100000, 'монет за раз'),
+                ('🏆 Профессиональный игрок', games_won, 100, 'побед'),
+                ('👑 Легенда казино', total_winnings, 5000000, 'монет накоплено'),
+                ('♠️ Покерный профи', poker_wins, 50, 'побед в покер'),
+                ('💰 Везунчик', jackpot_wins, 3, 'джекпота выиграно'),
+                ('🏅 Турнирный боец', tournament_wins, 5, 'побед в турнирах'),
+                ('🎲 Заядлый игрок', games_won + games_lost, 1000, 'игр сыграно')
+            ]
+            
+            for ach_type, current, required, metric in progress:
+                if ach_type not in earned_types:
+                    percentage = min(100, int(current * 100 / required))
+                    message += f"• {ach_type}: {current}/{required} {metric} ({percentage}%)\n"
+        
+        conn.close()
+        return message
+    except Exception as e:
+        return f"❌ Ошибка: {str(e)}"
+
 def cmd_daily(vk, event):
     try:
         user_id = event.obj.message['from_id']

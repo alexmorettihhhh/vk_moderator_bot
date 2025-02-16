@@ -3,6 +3,7 @@ from datetime import datetime
 import json
 import os
 from dotenv import load_dotenv
+import re
 
 # Load environment variables
 load_dotenv()
@@ -15,7 +16,6 @@ def extract_user_id(vk, text):
     # Если это упоминание (например, @durov или [id1|Павел])
     if '@' in text or '[' in text:
         # Извлекаем ID из формата [id123|Name]
-        import re
         id_match = re.search(r'\[id(\d+)\|.*?\]', text)
         if id_match:
             return int(id_match.group(1))
@@ -149,4 +149,31 @@ def parse_duration(duration_str):
     if current_number:  # Если строка заканчивается числом без единицы измерения
         total_seconds += int(current_number) * 60  # Считаем как минуты по умолчанию
     
-    return total_seconds 
+    return total_seconds
+
+def parse_vk_reg_date(vk_id: int) -> str:
+    """Парсит дату регистрации из FOAF профиля VK"""
+    try:
+        url = f'https://vk.com/foaf.php?id={vk_id}'
+        r = requests.get(url)
+        for line in r.text.split('\n'):
+            if 'ya:created' in line:
+                date_str = line.split('=')[1].strip(' "\'')
+                return date_str.split('T')[0]  # Возвращаем только дату без времени
+        return None
+    except Exception:
+        return None
+
+def get_vk_reg_date(user_id):
+    """Получает дату регистрации пользователя VK"""
+    try:
+        reg_date = parse_vk_reg_date(user_id)
+        if reg_date:
+            # Преобразуем строку даты в объект datetime и форматируем только дату
+            date = datetime.strptime(reg_date, '%Y-%m-%d')
+            return date.strftime('%d.%m.%Y')
+            
+        # Если не удалось получить дату через FOAF, возвращаем текущую дату
+        return datetime.now().strftime('%d.%m.%Y')
+    except Exception:
+        return datetime.now().strftime('%d.%m.%Y') 

@@ -224,6 +224,7 @@ def cmd_staff(vk, event):
         conn = sqlite3.connect('bot.db')
         c = conn.cursor()
         
+        # Получаем всех пользователей с ролями, кроме обычных пользователей
         c.execute('''SELECT user_id, role 
                     FROM users 
                     WHERE role != 'user' 
@@ -238,9 +239,21 @@ def cmd_staff(vk, event):
         if not staff:
             return "📋 Нет пользователей с ролями"
         
+        # Собираем все user_id для запроса к VK API
+        user_ids = [user_id for user_id, _ in staff]
+        
+        # Получаем информацию о пользователях через VK API
+        users_info = vk.users.get(user_ids=user_ids)
+        
+        # Создаем словарь для быстрого доступа к информации о пользователях
+        users_dict = {user['id']: user for user in users_info}
+        
+        # Формируем сообщение
         message = "📋 Пользователи с ролями:\n"
         for user_id, role in staff:
-            message += f"• {user_id}: {role}\n"
+            user = users_dict.get(user_id, {'first_name': 'Unknown', 'last_name': 'User'})
+            message += f"• @id{user_id} ({user['first_name']} {user['last_name']}) — {role}\n"
+        
         return message
     except Exception as e:
-        return f"❌ Ошибка: {str(e)}" 
+        return f"❌ Ошибка: {str(e)}"
