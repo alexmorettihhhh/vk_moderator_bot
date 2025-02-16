@@ -1,0 +1,24 @@
+{
+  "chat_id": 2,
+  "export_date": "2025-02-16 15:45:07",
+  "users": [
+    {
+      "user_id": 658802897,
+      "name": "Ishs Ism",
+      "messages": 0,
+      "level": 1,
+      "balance": 0,
+      "reputation": 0,
+      "warnings": 0
+    },
+    {
+      "user_id": 694099447,
+      "name": "Владимир Громов",
+      "messages": 11,
+      "level": 1,
+      "balance": 1,
+      "reputation": 0,
+      "warnings": 0
+    }
+  ]
+}

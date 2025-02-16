@@ -213,13 +213,52 @@ class StatsImageGenerator:
             draw.text((x + padding + icon_offset, pos_y + 25), value,
                      font=self.font_bold, fill=self.colors['text'])
         
+        # Получаем количество сообщений
+        messages_count = user_data.get('messages_count', 0)
+        
+        # Форматирование даты регистрации
+        reg_date = user_data.get('reg_date', '')
+        if isinstance(reg_date, str):
+            try:
+                if 'T' in reg_date:
+                    reg_date = datetime.strptime(reg_date, '%Y-%m-%dT%H:%M:%S')
+                elif '.' in reg_date:
+                    reg_date = datetime.strptime(reg_date, '%Y-%m-%d %H:%M:%S.%f')
+                else:
+                    reg_date = datetime.strptime(reg_date, '%Y-%m-%d %H:%M:%S')
+                reg_date = reg_date.strftime('%d.%m.%Y %H:%M')
+            except ValueError:
+                reg_date = 'Неизвестно'
+        elif isinstance(reg_date, datetime):
+            reg_date = reg_date.strftime('%d.%m.%Y %H:%M')
+        else:
+            reg_date = 'Неизвестно'
+        
+        # Форматирование последней активности
+        last_activity = user_data.get('last_activity', datetime.now())
+        if isinstance(last_activity, str):
+            try:
+                if 'T' in last_activity:
+                    last_activity = datetime.strptime(last_activity, '%Y-%m-%dT%H:%M:%S')
+                elif '.' in last_activity:
+                    last_activity = datetime.strptime(last_activity, '%Y-%m-%d %H:%M:%S.%f')
+                else:
+                    last_activity = datetime.strptime(last_activity, '%Y-%m-%d %H:%M:%S')
+                last_activity = last_activity.strftime('%d.%m.%Y %H:%M')
+            except ValueError:
+                last_activity = datetime.now().strftime('%d.%m.%Y %H:%M')
+        elif isinstance(last_activity, datetime):
+            last_activity = last_activity.strftime('%d.%m.%Y %H:%M')
+        else:
+            last_activity = datetime.now().strftime('%d.%m.%Y %H:%M')
+        
         # Отрисовка информационных строк
         draw_info_line(y + padding, "💬", "Сообщений", 
-                      str(user_data.get('messages', 0)), self.colors['accent1'])
+                      str(messages_count), self.colors['accent1'])
         draw_info_line(y + padding + line_height, "📅", "Регистрация",
-                      str(user_data.get('reg_date', '')), self.colors['accent2'])
+                      reg_date, self.colors['accent2'])
         draw_info_line(y + padding + line_height * 2, "⌚", "Активность",
-                      datetime.now().strftime('%d.%m.%Y'), self.colors['accent3'])
+                      last_activity, self.colors['accent3'])
         draw_info_line(y + padding + line_height * 3, "👥", "Пригласил",
                       f"{user_data.get('invited_count', 0)} чел.", self.colors['gradient1'])
 

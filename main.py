@@ -9,7 +9,8 @@ import json
 import threading
 from fun_commands import (
     cmd_profile, cmd_daily, cmd_marry, cmd_divorce,
-    cmd_rep, cmd_game, cmd_top, cmd_nickname, cmd_achievements
+    cmd_rep, cmd_game, cmd_top, cmd_nickname, cmd_achievements,
+    cmd_give
 )
 from games import (
     cmd_slots, cmd_duel, cmd_wheel, cmd_flip, cmd_dice,
@@ -22,7 +23,7 @@ from admin_commands import (
     cmd_skick, cmd_quiet, cmd_sban, cmd_sunban,
     cmd_addsenmoder, cmd_bug, cmd_stats_chat, cmd_settings,
     cmd_addadmin, cmd_removeadmin, cmd_massban, cmd_unbanall,
-    cmd_clear_warns, cmd_reset_stats, cmd_admin_list
+    cmd_clear_warns, cmd_reset_stats, cmd_admin_list, cmd_givemoney
 )
 from moderator_commands import (
     cmd_mute, cmd_unmute, cmd_warn, cmd_unwarn,
@@ -41,6 +42,10 @@ import time
 import sys
 from requests.exceptions import ConnectionError, ReadTimeout
 from image_generator import generate_stats_image
+from admin_utils import (
+    cmd_filter, cmd_pin, cmd_export,
+    cmd_welcome, cmd_backup, cmd_automod
+)
 
 # Инициализация логгеров
 logger = setup_logger()
@@ -91,11 +96,12 @@ def init_db():
                      last_activity TIMESTAMP)''')
 
         c.execute('''CREATE TABLE IF NOT EXISTS marriages
-                    (user_id INTEGER PRIMARY KEY,
-                     partner_id INTEGER,
+                    (user1_id INTEGER,
+                     user2_id INTEGER,
                      marriage_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                     FOREIGN KEY (user_id) REFERENCES users(user_id),
-                     FOREIGN KEY (partner_id) REFERENCES users(user_id))''')
+                     FOREIGN KEY (user1_id) REFERENCES users(user_id),
+                     FOREIGN KEY (user2_id) REFERENCES users(user_id),
+                     PRIMARY KEY (user1_id, user2_id))''')
 
         c.execute('''CREATE TABLE IF NOT EXISTS bans
                     (user_id INTEGER,
@@ -164,53 +170,54 @@ def cmd_info(vk, event):
     return "📚 Официальные ресурсы проекта:\n• Группа ВК: vk.com/group\n• Сайт: example.com"
 
 def cmd_stats(vk, event):
-    """Показать статистику пользователя"""
+    """Показать статистику пользователя с изображением"""
     try:
         user_id = event.obj.message['from_id']
-        
-        # Получаем информацию о пользователе
-        user_info = vk.users.get(user_ids=[user_id], fields=['photo_max'])[0]
-        
-        # Получаем дату регистрации
-        reg_date = get_vk_reg_date(user_id)
         
         conn = sqlite3.connect('bot.db')
         c = conn.cursor()
         
-        # Получаем статистику пользователя
-        c.execute('''SELECT u.level, u.xp, u.nickname, u.role,
-                    (SELECT COUNT(*) FROM message_history WHERE user_id = ?) as messages_count
-                    FROM users u WHERE u.user_id = ?''', (user_id, user_id))
+        # Подсчитываем количество сообщений для пользователя
+        c.execute('''SELECT COUNT(*) FROM message_history WHERE user_id = ?''', (user_id,))
+        messages_count = c.fetchone()[0]
+        
+        # Обновляем количество сообщений в таблице users
+        c.execute('''UPDATE users SET messages_count = ? WHERE user_id = ?''', (messages_count, user_id))
+        conn.commit()
+        
+        # Получаем информацию о пользователе
+        c.execute('''SELECT level, xp, balance, reputation, role, reg_date, invited_count
+                    FROM users 
+                    WHERE user_id = ?''', (user_id,))
         result = c.fetchone()
         
         if not result:
-            # Если пользователь не найден, создаем запись
-            c.execute('''INSERT INTO users (user_id, level, xp, role)
-                        VALUES (?, 1, 0, 'user')''', (user_id,))
-            conn.commit()
-            level, xp, nickname, role = 1, 0, None, 'user'
-            messages = 0
-        else:
-            level, xp, nickname, role, messages = result
+            return "❌ Пользователь не найден в базе данных"
+            
+        level, xp, balance, reputation, role, reg_date, invited_count = result
+        
+        # Получаем информацию о пользователе из VK API
+        user_info = vk.users.get(user_ids=[user_id], fields=['photo_max_orig'])[0]
         
         # Формируем данные для изображения
         user_data = {
             'user_id': user_id,
-            'messages': messages,
             'level': level,
             'xp': xp,
-            'nickname': nickname,
+            'balance': balance,
+            'reputation': reputation,
             'role': role,
+            'messages': messages_count,
             'reg_date': reg_date,
-            'avatar_url': user_info['photo_max']
+            'invited_count': invited_count,
+            'avatar_url': user_info.get('photo_max_orig')
         }
         
         # Генерируем изображение
         image_path = generate_stats_image(user_data)
-        
         if not image_path:
             return "❌ Ошибка при создании изображения"
-        
+            
         # Загружаем изображение
         upload = vk_api.VkUpload(vk)
         photo = upload.photo_messages(image_path)[0]
@@ -220,7 +227,7 @@ def cmd_stats(vk, event):
         
         # Отправляем сообщение с изображением
         vk.messages.send(
-            chat_id=event.chat_id,
+            peer_id=event.obj.message['peer_id'],
             attachment=attachment,
             random_id=get_random_id()
         )
@@ -231,8 +238,7 @@ def cmd_stats(vk, event):
         except:
             pass
             
-        return None  # Возвращаем None, чтобы избежать двойной отправки
-        
+        return None
     except Exception as e:
         return f"❌ Ошибка: {str(e)}"
 
@@ -324,6 +330,14 @@ def cmd_help(vk, event, args):
             message += "• /bug [описание] — сообщить о баге\n"
             message += "• /settings [параметр] [значение] — настройки беседы\n"
             message += "• /snick [ID] [ник] — установить ник пользователю\n"
+            message += "• /givemoney [ID] [количество] — выдать монеты пользователю\n"
+            message += "\n⚙️ Управление беседой:\n"
+            message += "• /filter [add/remove/list] [слово] — управление фильтром слов\n"
+            message += "• /pin — закрепить сообщение (ответом)\n"
+            message += "• /export — экспорт данных беседы\n"
+            message += "• /welcome [set/clear/show] — управление приветствием\n"
+            message += "• /backup [create/list/restore] — управление резервными копиями\n"
+            message += "• /automod [status/spam/caps/links/warns/action] — настройка автомодерации\n"
         
         return message
     except Exception as e:
@@ -403,11 +417,6 @@ def add_xp(vk, event, user_id, xp_amount):
                     SET xp = ?, level = ?
                     WHERE user_id = ?''', (new_xp, new_level, user_id))
         
-        # Add message to history
-        c.execute('''INSERT INTO message_history (user_id, chat_id, message_type, timestamp)
-                    VALUES (?, ?, ?, ?)''', 
-                    (user_id, event.chat_id, 'text', datetime.now()))
-        
         conn.commit()
         conn.close()
         
@@ -422,11 +431,6 @@ def add_xp(vk, event, user_id, xp_amount):
         
         c.execute('''INSERT INTO users (user_id, xp, level, role) 
                     VALUES (?, ?, 1, ?)''', (user_id, xp_amount, role))
-        
-        # Add first message to history
-        c.execute('''INSERT INTO message_history (user_id, chat_id, message_type, timestamp)
-                    VALUES (?, ?, ?, ?)''', 
-                    (user_id, event.chat_id, 'text', datetime.now()))
         
         conn.commit()
         
@@ -629,36 +633,46 @@ def main():
                             )
                         continue
                     
-                    # Записываем сообщение в историю
+                    # Открываем одно соединение для всех операций с базой данных
                     conn = sqlite3.connect('bot.db')
                     c = conn.cursor()
-                    c.execute('''INSERT INTO message_history (user_id, chat_id, message_type, timestamp)
-                                VALUES (?, ?, ?, ?)''', 
-                                (user_id, chat_id, 'text', datetime.now()))
                     
-                    # Обновляем статистику чата
-                    c.execute('''INSERT OR REPLACE INTO chat_stats 
-                                (chat_id, messages_today, active_users_today, last_update)
-                                VALUES (
-                                    ?,
-                                    COALESCE((SELECT messages_today FROM chat_stats WHERE chat_id = ?) + 1, 1),
-                                    (SELECT COUNT(DISTINCT user_id) FROM message_history 
-                                     WHERE chat_id = ? AND timestamp > ?),
-                                    ?
-                                )''', (chat_id, chat_id, chat_id, datetime.now() - timedelta(days=1), datetime.now()))
-                    
-                    conn.commit()
-                    conn.close()
-                    
-                    # Обновляем время последней активности пользователя
-                    conn = sqlite3.connect('bot.db')
-                    c = conn.cursor()
-                    c.execute('''UPDATE users 
-                                SET last_activity = ? 
-                                WHERE user_id = ?''', 
-                                (datetime.now(), user_id))
-                    conn.commit()
-                    conn.close()
+                    try:
+                        # Проверяем существование пользователя
+                        c.execute('SELECT 1 FROM users WHERE user_id = ?', (user_id,))
+                        if not c.fetchone():
+                            c.execute('''INSERT INTO users 
+                                        (user_id, messages_count, reg_date) 
+                                        VALUES (?, 0, ?)''', 
+                                        (user_id, datetime.now()))
+                        
+                        # Проверяем, не было ли такого сообщения в последние 5 секунд
+                        five_seconds_ago = datetime.now() - timedelta(seconds=5)
+                        c.execute('''SELECT 1 FROM message_history 
+                                    WHERE user_id = ? AND chat_id = ? 
+                                    AND timestamp > ?''', 
+                                    (user_id, chat_id, five_seconds_ago))
+                        
+                        if not c.fetchone():
+                            # Добавляем сообщение в историю
+                            current_time = datetime.now()
+                            c.execute('''INSERT INTO message_history 
+                                        (user_id, chat_id, message_type, timestamp)
+                                        VALUES (?, ?, ?, ?)''', 
+                                        (user_id, chat_id, 'text', current_time))
+                            
+                            # Обновляем время последней активности
+                            c.execute('''UPDATE users 
+                                        SET last_activity = ? 
+                                        WHERE user_id = ?''', 
+                                        (current_time, user_id))
+                        
+                        conn.commit()
+                    except Exception as e:
+                        conn.rollback()
+                        logger.error(f"Ошибка при обработке сообщения: {str(e)}", exc_info=True)
+                    finally:
+                        conn.close()
                     
                     # Логируем команду, если это команда
                     if text.startswith('/'):
@@ -1226,6 +1240,79 @@ def main():
                                 message=response,
                                 random_id=get_random_id()
                             )
+                        elif command == 'resetmessages':
+                            if is_admin(event.obj.message['from_id']):
+                                try:
+                                    conn = sqlite3.connect('bot.db')
+                                    c = conn.cursor()
+                                    c.execute('UPDATE users SET messages_count = 0')
+                                    c.execute('DELETE FROM message_history')
+                                    conn.commit()
+                                    conn.close()
+                                    response = "✅ Счетчики сообщений сброшены"
+                                except Exception as e:
+                                    response = f"❌ Ошибка: {str(e)}"
+                                vk.messages.send(
+                                    chat_id=chat_id,
+                                    message=response,
+                                    random_id=get_random_id()
+                                )
+                        elif command == 'givemoney':
+                            if is_admin(event.obj.message['from_id']):
+                                response = cmd_givemoney(vk, event, args)
+                                vk.messages.send(
+                                    chat_id=chat_id,
+                                    message=response,
+                                    random_id=get_random_id()
+                                )
+                        elif command == 'filter':
+                            if is_admin(event.obj.message['from_id']):
+                                response = cmd_filter(vk, event, args)
+                                vk.messages.send(
+                                    chat_id=chat_id,
+                                    message=response,
+                                    random_id=get_random_id()
+                                )
+                        elif command == 'pin':
+                            if is_admin(event.obj.message['from_id']):
+                                response = cmd_pin(vk, event, args)
+                                vk.messages.send(
+                                    chat_id=chat_id,
+                                    message=response,
+                                    random_id=get_random_id()
+                                )
+                        elif command == 'export':
+                            if is_admin(event.obj.message['from_id']):
+                                response = cmd_export(vk, event, args)
+                                vk.messages.send(
+                                    chat_id=chat_id,
+                                    message=response,
+                                    random_id=get_random_id()
+                                )
+                        elif command == 'welcome':
+                            if is_admin(event.obj.message['from_id']):
+                                response = cmd_welcome(vk, event, args)
+                                vk.messages.send(
+                                    chat_id=chat_id,
+                                    message=response,
+                                    random_id=get_random_id()
+                                )
+                        elif command == 'backup':
+                            if is_admin(event.obj.message['from_id']):
+                                response = cmd_backup(vk, event, args)
+                                vk.messages.send(
+                                    chat_id=chat_id,
+                                    message=response,
+                                    random_id=get_random_id()
+                                )
+                        elif command == 'automod':
+                            if is_admin(event.obj.message['from_id']):
+                                response = cmd_automod(vk, event, args)
+                                vk.messages.send(
+                                    chat_id=chat_id,
+                                    message=response,
+                                    random_id=get_random_id()
+                                )
                         
                 except Exception as e:
                     error_msg = f"Ошибка при обработке сообщения: {str(e)}"

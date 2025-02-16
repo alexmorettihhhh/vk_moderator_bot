@@ -150,69 +150,80 @@ def cmd_slots(vk, event, args):
 
 
 def cmd_dice(vk, event, args):
-    """Игра в кости"""
+    """Игра в кости с другим игроком"""
     if len(args) < 2:
-        return "⚠️ Использование: /dice [пользователь] [ставка]"
+        return "⚠️ Использование: /dice [ID] [ставка]"
     
     try:
+        user_id = event.obj.message['from_id']
         target = args[0]
         bet = int(args[1])
-        user_id = event.obj.message['from_id']
         
-        # Извлекаем ID пользователя
+        if bet < 1:
+            return "⚠️ Минимальная ставка: 1 монета"
+        
+        # Извлекаем ID оппонента
         opponent_id = extract_user_id(vk, target)
         if not opponent_id:
             return "❌ Не удалось определить пользователя"
         
-        if bet < 1:
-            return "⚠️ Минимальная ставка: 1 монета"
         if user_id == opponent_id:
-            return "❌ Нельзя играть с самим собой"
+            return "❌ Вы не можете играть сами с собой"
         
         conn = sqlite3.connect('bot.db')
         c = conn.cursor()
         
-        # Проверяем балансы обоих игроков
-        c.execute('SELECT balance FROM users WHERE user_id IN (?, ?)',
-                 (user_id, opponent_id))
-        balances = c.fetchall()
+        # Проверяем баланс обоих игроков
+        c.execute('SELECT user_id, balance FROM users WHERE user_id IN (?, ?)', (user_id, opponent_id))
+        balances = {row[0]: row[1] for row in c.fetchall()}
         
-        if len(balances) != 2 or any(b[0] < bet for b in balances):
-            return "❌ Недостаточно монет у одного из игроков"
+        if user_id not in balances:
+            return "❌ У вас нет аккаунта в боте"
+        if opponent_id not in balances:
+            opponent_info = vk.users.get(user_ids=[opponent_id])[0]
+            return f"❌ У пользователя @id{opponent_id} ({opponent_info['first_name']}) нет аккаунта в боте"
+        
+        if balances[user_id] < bet:
+            return f"❌ У вас недостаточно монет (нужно {bet}, а у вас {balances[user_id]})"
+        if balances[opponent_id] < bet:
+            opponent_info = vk.users.get(user_ids=[opponent_id])[0]
+            return f"❌ У пользователя @id{opponent_id} ({opponent_info['first_name']}) недостаточно монет (нужно {bet}, а у него {balances[opponent_id]})"
         
         # Бросаем кости
         user_roll = random.randint(1, 6)
         opponent_roll = random.randint(1, 6)
         
+        # Определяем победителя
         if user_roll > opponent_roll:
             winner_id = user_id
             loser_id = opponent_id
-            result_message = f"🎲 Вы бросили: {user_roll}, противник бросил: {opponent_roll}\n🏆 Вы победили!"
-        elif user_roll < opponent_roll:
+        elif opponent_roll > user_roll:
             winner_id = opponent_id
             loser_id = user_id
-            result_message = f"🎲 Вы бросили: {user_roll}, противник бросил: {opponent_roll}\n😢 Вы проиграли!"
         else:
-            return f"🎲 Вы бросили: {user_roll}, противник бросил: {opponent_roll}\n🤝 Ничья! Ставки возвращены."
+            return "🎲 Ничья! Оба игрока выбросили " + str(user_roll)
         
         # Обновляем балансы
-        c.execute('UPDATE users SET balance = balance + ? WHERE user_id = ?',
-                 (bet, winner_id))
-        c.execute('UPDATE users SET balance = balance - ? WHERE user_id = ?',
-                 (bet, loser_id))
+        c.execute('UPDATE users SET balance = balance + ? WHERE user_id = ?', (bet, winner_id))
+        c.execute('UPDATE users SET balance = balance - ? WHERE user_id = ?', (bet, loser_id))
+        
+        # Обновляем статистику
+        c.execute('UPDATE users SET games_won = games_won + 1 WHERE user_id = ?', (winner_id,))
+        c.execute('UPDATE users SET games_lost = games_lost + 1 WHERE user_id = ?', (loser_id,))
         
         conn.commit()
         conn.close()
         
         # Получаем информацию о пользователях
-        users_info = vk.users.get(user_ids=[winner_id, loser_id])
-        winner_info = next(u for u in users_info if u['id'] == winner_id)
-        loser_info = next(u for u in users_info if u['id'] == loser_id)
+        users_info = vk.users.get(user_ids=[user_id, opponent_id])
+        user_name = users_info[0]['first_name']
+        opponent_name = users_info[1]['first_name']
         
-        return (f"{result_message}\n"
-                f"💰 Выигрыш: {bet} монет\n"
-                f"🏆 Победитель: @id{winner_id} ({winner_info['first_name']})\n"
-                f"😢 Проигравший: @id{loser_id} ({loser_info['first_name']})")
+        return (f"🎲 Результаты игры в кости:\n"
+                f"@id{user_id} ({user_name}): {user_roll}\n"
+                f"@id{opponent_id} ({opponent_name}): {opponent_roll}\n\n"
+                f"Победитель: @id{winner_id} (+{bet} монет)")
+                
     except Exception as e:
         return f"❌ Ошибка: {str(e)}"
     
@@ -555,49 +566,71 @@ def cmd_wheel(vk, event, args):
         return f"❌ Ошибка: {str(e)}"
 
 def cmd_flip(vk, event, args):
-    """Подбрасывание монетки"""
+    """Игра в монетку"""
     if not args:
-        return "⚠️ Укажите ставку и сторону (heads/tails)"
+        return "⚠️ Использование: /flip [сумма] [орел/решка]"
     
     try:
-        bet = int(args[0])
-        side = args[1].lower() if len(args) > 1 else None
-        
-        if bet < 1:
-            return "⚠️ Минимальная ставка: 1 монета"
-        if side not in ['heads', 'tails']:
-            return "⚠️ Выберите сторону: heads или tails"
-        
         user_id = event.obj.message['from_id']
+        
+        # Проверяем формат аргументов
+        if len(args) < 2:
+            return "⚠️ Укажите ставку и сторону монеты (орел/решка)"
+            
+        bet = int(args[0])
+        choice = args[1].lower()
+        
+        # Проверяем корректность выбора стороны
+        if choice not in ['орел', 'решка']:
+            return "⚠️ Выберите: орел или решка"
+        
+        # Проверяем валидность ставки
+        if not validate_bet(bet):
+            return "⚠️ Минимальная ставка: 1, максимальная: 1,000,000"
+        
         conn = sqlite3.connect('bot.db')
         c = conn.cursor()
         
         # Проверяем баланс
         c.execute('SELECT balance FROM users WHERE user_id = ?', (user_id,))
-        balance = c.fetchone()
+        result = c.fetchone()
         
-        if not balance or balance[0] < bet:
-            return "❌ Недостаточно монет"
+        if not result:
+            conn.close()
+            return "❌ Вы не зарегистрированы в системе"
+            
+        balance = result[0]
+        
+        if balance < bet:
+            conn.close()
+            return f"❌ Недостаточно монет! Ваш баланс: {balance}"
         
         # Подбрасываем монетку
-        result = random.choice(['heads', 'tails'])
+        flip_result = 'орел' if random.random() < 0.5 else 'решка'
         
-        # Проверяем выигрыш
-        if result == side:
-            win = bet
-            message = f"🎲 Выпало: {result}\n💰 Выигрыш: {win} монет"
-        else:
-            win = -bet
-            message = f"🎲 Выпало: {result}\n💸 Проигрыш: {bet} монет"
+        # Определяем выигрыш
+        won = choice == flip_result
+        win_amount = bet if won else -bet
         
         # Обновляем баланс
         c.execute('UPDATE users SET balance = balance + ? WHERE user_id = ?',
-                 (win, user_id))
+                 (win_amount, user_id))
+        
+        # Обновляем статистику
+        if won:
+            update_user_stats(conn, user_id, win_amount)
+            check_achievement(conn, user_id, win_amount, 'flip')
         
         conn.commit()
         conn.close()
         
-        return message
+        result_emoji = '🦅' if flip_result == 'орел' else '👑'
+        result_message = (f"{result_emoji} Выпал {flip_result}!\n"
+                         f"{'✅ Вы выиграли' if won else '❌ Вы проиграли'} {abs(win_amount)} монет!")
+        
+        return result_message
+    except ValueError:
+        return "❌ Ставка должна быть числом"
     except Exception as e:
         return f"❌ Ошибка: {str(e)}"
 

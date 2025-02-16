@@ -294,44 +294,48 @@ def cmd_addsenmoder(vk, event, args):
         return f"❌ Ошибка: {str(e)}"
 
 def cmd_bug(vk, event, args):
-    """Отправить сообщение о баге разработчику"""
-    if not is_admin(event.obj.message['from_id']):
-        return "⚠️ У вас нет прав администратора"
-        
+    """Отправка отчета об ошибке"""
     if not args:
-        return "⚠️ Укажите описание бага"
+        return "⚠️ Использование: /bug [описание ошибки]"
     
     try:
+        user_id = event.obj.message['from_id']
         bug_description = ' '.join(args)
-        reporter_id = event.obj.message['from_id']
         
         conn = sqlite3.connect('bot.db')
         c = conn.cursor()
         
-        c.execute('''INSERT INTO bug_reports (reporter_id, description, report_time, status)
-                    VALUES (?, ?, ?, 'new')''', (reporter_id, bug_description, datetime.now()))
+        # Проверяем время последнего отправленного баг-репорта
+        c.execute('SELECT last_bug_report FROM users WHERE user_id = ?', (user_id,))
+        result = c.fetchone()
         
-        bug_id = c.lastrowid
+        if result and result[0]:
+            last_report = datetime.strptime(result[0], '%Y-%m-%d %H:%M:%S.%f')
+            time_since_last = datetime.now() - last_report
+            
+            if time_since_last < timedelta(hours=12):
+                time_left = timedelta(hours=12) - time_since_last
+                hours = int(time_left.total_seconds() // 3600)
+                minutes = int((time_left.total_seconds() % 3600) // 60)
+                return f"⏳ Отправлять баг-репорты можно раз в 12 часов.\nПодождите ещё {hours} ч. {minutes} мин."
+        
+        # Добавляем отчет об ошибке
+        c.execute('''INSERT INTO bug_reports (user_id, description, status, report_date)
+                    VALUES (?, ?, 'new', CURRENT_TIMESTAMP)''', (user_id, bug_description))
+        
+        # Получаем ID отчета
+        report_id = c.lastrowid
+        
+        # Обновляем время последнего баг-репорта
+        c.execute('UPDATE users SET last_bug_report = ? WHERE user_id = ?', 
+                 (datetime.now(), user_id))
         
         conn.commit()
         conn.close()
         
-        # Получаем информацию о репортере
-        reporter_info = vk.users.get(user_ids=[reporter_id])[0]
-        
-        # Формируем сообщение о баге
-        bug_message = (f"🐛 Новый баг репорт #{bug_id}\n"
-                      f"От: @id{reporter_id} ({reporter_info['first_name']} {reporter_info['last_name']})\n"
-                      f"Время: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-                      f"Описание: {bug_description}")
-        
-        # Уведомляем всех администраторов
-        notify_admins(vk, bug_message)
-        
-        return f"✅ Баг репорт #{bug_id} отправлен администраторам"
+        return f"✅ Спасибо за сообщение об ошибке!\nВаш отчет #{report_id} принят и будет рассмотрен."
     except Exception as e:
-        log_error(f"Ошибка в команде bug: {str(e)}", exc_info=True)
-        return f"❌ Ошибка: {str(e)}"
+        return f"❌ Ошибка при отправке отчета: {str(e)}"
 
 def notify_admins(vk, message, exclude_id=None):
     """Отправить сообщение всем администраторам"""
@@ -757,4 +761,55 @@ def cmd_admin_list(vk, event):
         return message
     except Exception as e:
         log_error(f"Ошибка в команде admin_list: {str(e)}", exc_info=True)
+        return f"❌ Ошибка: {str(e)}"
+
+def cmd_givemoney(vk, event, args):
+    """Выдать монеты пользователю (только для администраторов)"""
+    if not is_admin(event.obj.message['from_id']):
+        return "⚠️ У вас нет прав администратора"
+        
+    if not args or len(args) < 2:
+        return "⚠️ Использование: /givemoney [пользователь] [количество]"
+    
+    try:
+        target = args[0]
+        try:
+            amount = int(args[1])
+            if amount <= 0:
+                return "⚠️ Укажите положительное количество монет"
+        except ValueError:
+            return "⚠️ Укажите корректное количество монет"
+        
+        user_id = extract_user_id(vk, target)
+        if not user_id:
+            return "❌ Не удалось определить пользователя"
+        
+        conn = sqlite3.connect('bot.db')
+        c = conn.cursor()
+        
+        # Проверяем существование пользователя и получаем текущий баланс
+        c.execute('SELECT balance FROM users WHERE user_id = ?', (user_id,))
+        result = c.fetchone()
+        
+        if result is None:
+            # Создаем запись для нового пользователя
+            c.execute('''INSERT INTO users (user_id, balance, level, xp)
+                        VALUES (?, ?, 1, 0)''', (user_id, amount))
+            new_balance = amount
+        else:
+            # Обновляем существующий баланс
+            current_balance = result[0]
+            new_balance = current_balance + amount
+            c.execute('UPDATE users SET balance = ? WHERE user_id = ?', 
+                     (new_balance, user_id))
+        
+        conn.commit()
+        conn.close()
+        
+        log_moderation(event.obj.message['from_id'], 'GIVE_MONEY', user_id, f"Выдано {amount} монет")
+        
+        user_info = vk.users.get(user_ids=[user_id])[0]
+        return f"💰 Пользователю @id{user_id} ({user_info['first_name']}) выдано {amount} монет\n💳 Новый баланс: {new_balance}"
+    except Exception as e:
+        log_error(f"Ошибка в команде givemoney: {str(e)}", exc_info=True)
         return f"❌ Ошибка: {str(e)}" 

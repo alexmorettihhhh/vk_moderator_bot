@@ -1,5 +1,64 @@
-
-2025-02-16 04:36:45,470 - User: 694099447 | Chat: 2 | Command: stats | Args: 
-2025-02-16 04:38:32,454 - User: 694099447 | Chat: 2 | Command: stats | Args: 
-2025-02-16 04:40:01,928 - User: 694099447 | Chat: 2 | Command: stats | Args: 
-2025-02-16 04:42:38,112 - User: 694099447 | Chat: 2 | Command: stats | Args: 
+2025-02-16 15:21:59,808 - User: 694099447 | Chat: 2 | Command: stats | Args: 
+2025-02-16 15:22:11,954 - User: 694099447 | Chat: 2 | Command: profile | Args: 
+2025-02-16 15:22:22,797 - User: 694099447 | Chat: 2 | Command: profile | Args: 
+2025-02-16 15:24:09,476 - User: 694099447 | Chat: 2 | Command: profile | Args: 
+2025-02-16 15:24:16,317 - User: 694099447 | Chat: 2 | Command: profile | Args: 
+2025-02-16 15:27:06,503 - User: 694099447 | Chat: 2 | Command: stats | Args: 
+2025-02-16 15:27:16,557 - User: 694099447 | Chat: 2 | Command: stats | Args: 
+2025-02-16 15:27:27,229 - User: 694099447 | Chat: 2 | Command: profile | Args: 
+2025-02-16 15:27:33,315 - User: 694099447 | Chat: 2 | Command: rpfile | Args: 
+2025-02-16 15:27:34,964 - User: 694099447 | Chat: 2 | Command: profile | Args: 
+2025-02-16 15:30:06,876 - User: 694099447 | Chat: 2 | Command: profile | Args: 
+2025-02-16 15:30:17,113 - User: 694099447 | Chat: 2 | Command: profile | Args: 
+2025-02-16 15:30:30,853 - User: 694099447 | Chat: 2 | Command: ban | Args: [id658802897|ishs] lsls
+2025-02-16 15:31:00,597 - User: 694099447 | Chat: 2 | Command: unban | Args: [id658802897|ishs]
+2025-02-16 15:31:18,186 - User: 694099447 | Chat: 2 | Command: stats | Args: 
+2025-02-16 15:31:25,376 - User: 694099447 | Chat: 2 | Command: stats | Args: 
+2025-02-16 15:31:33,082 - User: 694099447 | Chat: 2 | Command: stats | Args: 
+2025-02-16 15:31:40,732 - User: 694099447 | Chat: 2 | Command: profile | Args: 
+2025-02-16 15:33:09,297 - User: 658802897 | Chat: 2 | Command: game | Args: 
+2025-02-16 15:33:19,719 - User: 658802897 | Chat: 2 | Command: game | Args: бумага
+2025-02-16 15:34:13,018 - User: 694099447 | Chat: 2 | Command: game | Args: 
+2025-02-16 15:34:18,796 - User: 694099447 | Chat: 2 | Command: game | Args: ножницы
+2025-02-16 15:34:24,057 - User: 694099447 | Chat: 2 | Command: game | Args: ножницы
+2025-02-16 15:34:27,048 - User: 694099447 | Chat: 2 | Command: game | Args: ножницы
+2025-02-16 15:34:33,156 - User: 658802897 | Chat: 2 | Command: game | Args: камень
+2025-02-16 15:44:28,259 - User: 694099447 | Chat: 2 | Command: exports | Args: 
+2025-02-16 15:44:54,947 - User: 694099447 | Chat: 2 | Command: help | Args: 
+2025-02-16 15:45:07,792 - User: 694099447 | Chat: 2 | Command: export | Args: 
+2025-02-16 15:45:41,394 - User: 694099447 | Chat: 2 | Command: filter | Args: add лох
+2025-02-16 15:46:04,587 - User: 694099447 | Chat: 2 | Command: automod | Args: links
+2025-02-16 15:46:10,515 - User: 694099447 | Chat: 2 | Command: automod | Args: 
+2025-02-16 15:46:16,999 - User: 694099447 | Chat: 2 | Command: automod | Args: links on
+2025-02-16 15:46:24,153 - User: 694099447 | Chat: 2 | Command: automod | Args: links off
+2025-02-16 17:41:00,045 - User: 694099447 | Chat: 2 | Command: givemoney | Args: [id671020079|@nko_1] 100
+2025-02-16 17:41:08,758 - User: 694099447 | Chat: 2 | Command: getid | Args: 
+2025-02-16 17:41:16,641 - User: 694099447 | Chat: 2 | Command: givemoney | Args: 694099447 10000
+2025-02-16 17:41:22,827 - User: 694099447 | Chat: 2 | Command: slots | Args: 100
+2025-02-16 17:41:27,867 - User: 694099447 | Chat: 2 | Command: profile | Args: 
+2025-02-16 17:41:43,575 - User: 694099447 | Chat: 2 | Command: stats | Args: 
+2025-02-16 17:43:18,996 - User: 694099447 | Chat: 2 | Command: stats | Args: 
+2025-02-16 17:46:17,761 - User: 694099447 | Chat: 2 | Command: stats | Args: 
+2025-02-16 17:47:05,240 - User: 694099447 | Chat: 2 | Command: stats | Args: 
+2025-02-16 17:47:12,661 - User: 694099447 | Chat: 2 | Command: quiet | Args: 
+2025-02-16 17:47:19,045 - User: 694099447 | Chat: 2 | Command: quiet | Args: 17:47
+2025-02-16 17:47:24,347 - User: 694099447 | Chat: 2 | Command: quier | Args: 
+2025-02-16 17:47:27,835 - User: 694099447 | Chat: 2 | Command: quiet | Args: 
+2025-02-16 17:47:34,232 - User: 694099447 | Chat: 2 | Command: help | Args: 
+2025-02-16 17:47:53,960 - User: 694099447 | Chat: 2 | Command: quiet | Args: 1
+2025-02-16 17:48:20,443 - User: 694099447 | Chat: 2 | Command: stats | Args: 
+2025-02-16 17:49:16,979 - User: 694099447 | Chat: 2 | Command: stats | Args: 
+2025-02-16 17:50:06,958 - User: 694099447 | Chat: 2 | Command: stats | Args: 
+2025-02-16 17:50:22,853 - User: 694099447 | Chat: 2 | Command: profile | Args: 
+2025-02-16 17:50:29,471 - User: 694099447 | Chat: 2 | Command: stats | Args: 
+2025-02-16 17:52:29,178 - User: 694099447 | Chat: 2 | Command: stats | Args: 
+2025-02-16 17:55:35,182 - User: 694099447 | Chat: 2 | Command: stats | Args: 
+2025-02-16 17:59:05,734 - User: 694099447 | Chat: 2 | Command: stats | Args: 
+2025-02-16 17:59:16,436 - User: 694099447 | Chat: 2 | Command: stats | Args: 
+2025-02-16 17:59:24,444 - User: 694099447 | Chat: 2 | Command: stats | Args: 
+2025-02-16 18:00:45,802 - User: 694099447 | Chat: 2 | Command: stats | Args: 
+2025-02-16 18:00:52,605 - User: 694099447 | Chat: 2 | Command: stats | Args: 
+2025-02-16 19:53:00,384 - User: 694099447 | Chat: 2 | Command: remove | Args: 
+2025-02-16 19:53:17,855 - User: 694099447 | Chat: 2 | Command: stats | Args: 
+2025-02-16 20:39:19,156 - User: 694099447 | Chat: 2 | Command: stats | Args: 
+2025-02-16 20:39:35,766 - User: 694099447 | Chat: 2 | Command: stats | Args: 

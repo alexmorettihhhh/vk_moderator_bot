@@ -5,7 +5,9 @@ import random
 from utils import extract_user_id
 
 def cmd_profile(vk, event, args):
+    """Показывает профиль пользователя"""
     try:
+        # Определяем ID пользователя
         if args:
             target = ' '.join(args)
             user_id = extract_user_id(vk, target)
@@ -17,49 +19,56 @@ def cmd_profile(vk, event, args):
         conn = sqlite3.connect('bot.db')
         c = conn.cursor()
         
-        # Get user info
-        c.execute('''SELECT nickname, level, xp, messages_count, balance, reputation 
-                    FROM users WHERE user_id = ?''', (user_id,))
+        # Подсчитываем количество сообщений для пользователя напрямую из message_history
+        c.execute('''SELECT COUNT(*) FROM message_history WHERE user_id = ?''', (user_id,))
+        messages_count = c.fetchone()[0]
+        
+        # Получаем информацию о пользователе
+        c.execute('''SELECT level, xp, balance, reputation, nickname, role, invited_count
+                    FROM users 
+                    WHERE user_id = ?''', (user_id,))
         result = c.fetchone()
         
         if not result:
-            return "⚠️ Пользователь не найден в базе данных"
+            return "❌ Пользователь не найден в базе данных"
+            
+        level, xp, balance, reputation, nickname, role, invited_count = result
         
-        nickname, level, xp, messages, balance, reputation = result
+        # Получаем информацию о пользователе из VK API
+        user_info = vk.users.get(user_ids=[user_id])[0]
         
-        # Get marriage info
-        c.execute('''SELECT user2_id, marriage_date FROM marriages 
-                    WHERE user1_id = ? OR user2_id = ?''', (user_id, user_id))
+        # Формируем сообщение
+        message = f"👤 Профиль пользователя {user_info['first_name']} {user_info['last_name']}\n\n"
+        message += f"👑 Роль: {role}\n"
+        message += f"📊 Уровень: {level}\n"
+        message += f"✨ Опыт: {xp}\n"
+        message += f"💰 Баланс: {balance}\n"
+        message += f"👍 Репутация: {reputation}\n"
+        message += f"💭 Сообщений: {messages_count}\n"
+        message += f"👥 Приглашено: {invited_count}\n"
+        
+        if nickname:
+            message += f"🏷 Никнейм: {nickname}\n"
+        
+        # Проверяем, состоит ли пользователь в браке
+        c.execute('''SELECT user2_id, marriage_date 
+                    FROM marriages 
+                    WHERE user1_id = ?
+                    UNION
+                    SELECT user1_id, marriage_date 
+                    FROM marriages 
+                    WHERE user2_id = ?''', (user_id, user_id))
         marriage = c.fetchone()
         
-        # Get achievements
-        c.execute('SELECT achievement_type FROM achievements WHERE user_id = ?', (user_id,))
-        achievements = c.fetchall()
+        if marriage:
+            partner_id, marriage_date = marriage
+            partner_info = vk.users.get(user_ids=[partner_id])[0]
+            message += f"\n💍 В браке с {partner_info['first_name']} {partner_info['last_name']}\n"
+            message += f"📅 Дата свадьбы: {marriage_date}"
         
         conn.close()
-        
-        # Format message
-        user_info = vk.users.get(user_ids=user_id)[0]
-        message = f"👤 Профиль пользователя @id{user_id} ({user_info['first_name']}):\n\n"
-        if nickname:
-            message += f"🏷 Ник: {nickname}\n"
-        message += f"📊 Уровень: {level} ({xp}/{level * 1000} XP)\n"
-        message += f"💬 Сообщений: {messages}\n"
-        message += f"💰 Баланс: {balance} монет\n"
-        message += f"👍 Репутация: {reputation}\n"
-        
-        if marriage:
-            partner_id = marriage[0]
-            partner_info = vk.users.get(user_ids=partner_id)[0]
-            marriage_date = datetime.strptime(marriage[1], '%Y-%m-%d %H:%M:%S.%f')
-            message += f"💑 В браке с @id{partner_id} ({partner_info['first_name']}) с {marriage_date.strftime('%d.%m.%Y')}\n"
-        
-        if achievements:
-            message += "\n🏆 Достижения:\n"
-            for achievement in achievements:
-                message += f"• {achievement[0]}\n"
-        
         return message
+        
     except Exception as e:
         return f"❌ Ошибка: {str(e)}"
 
@@ -88,12 +97,22 @@ def cmd_give(vk, event, args):
         conn = sqlite3.connect('bot.db')
         c = conn.cursor()
         
-        # Проверяем баланс отправителя
+        # Проверяем существование отправителя в базе
         c.execute('SELECT balance FROM users WHERE user_id = ?', (from_id,))
-        sender_balance = c.fetchone()
+        sender = c.fetchone()
+        if not sender:
+            c.execute('INSERT INTO users (user_id, balance) VALUES (?, 0)', (from_id,))
+            conn.commit()
+            return "❌ У вас нет монет для передачи"
         
-        if not sender_balance or sender_balance[0] < amount:
-            return "❌ Недостаточно монет для передачи"
+        # Проверяем баланс отправителя
+        if sender[0] < amount:
+            return f"❌ Недостаточно монет для передачи (у вас {sender[0]} монет)"
+        
+        # Проверяем существование получателя в базе
+        c.execute('SELECT 1 FROM users WHERE user_id = ?', (to_id,))
+        if not c.fetchone():
+            c.execute('INSERT INTO users (user_id, balance) VALUES (?, 0)', (to_id,))
         
         # Переводим монеты
         c.execute('UPDATE users SET balance = balance - ? WHERE user_id = ?', (amount, from_id))
@@ -104,8 +123,10 @@ def cmd_give(vk, event, args):
         
         user_info = vk.users.get(user_ids=[to_id])[0]
         return f"💰 Вы успешно передали {amount} монет пользователю @id{to_id} ({user_info['first_name']})"
+    except ValueError:
+        return "❌ Неверный формат суммы. Используйте целое число"
     except Exception as e:
-        return f"❌ Ошибка: {str(e)}"
+        return f"❌ Ошибка при передаче монет: {str(e)}"
     
 def cmd_nickname(vk, event, args):
     """Установка или изменение ника пользователя"""
@@ -135,62 +156,49 @@ def cmd_nickname(vk, event, args):
 
 
 def cmd_achievements(vk, event):
-    """Просмотр достижений пользователя"""
+    """Показывает достижения пользователя"""
     try:
         user_id = event.obj.message['from_id']
         
-        conn = sqlite3.connect('bot.db', detect_types=sqlite3.PARSE_DECLTYPES)
+        conn = sqlite3.connect('bot.db')
         c = conn.cursor()
         
-        # Получаем достижения
-        c.execute('''SELECT a.achievement_type, a.achievement_date, at.description 
-                    FROM achievements a
-                    JOIN achievement_types at ON a.achievement_type = at.type
+        # Получаем все достижения пользователя
+        c.execute('''SELECT a.type, a.earned_date, at.description 
+                    FROM achievements a 
+                    JOIN achievement_types at ON a.type = at.type 
                     WHERE a.user_id = ?
-                    ORDER BY a.achievement_date DESC''', (user_id,))
+                    ORDER BY a.earned_date DESC''', (user_id,))
         achievements = c.fetchall()
         
-        if not achievements:
-            return "🏆 У вас пока нет достижений"
-        
-        message = "🏆 Ваши достижения:\n\n"
-        for achievement_type, achievement_date, description in achievements:
-            formatted_date = achievement_date.strftime('%d.%m.%Y')
-            message += f"• {achievement_type} - {description}\n  Получено: {formatted_date}\n"
-        
-        # Получаем прогресс для незаработанных достижений
-        c.execute('''SELECT total_winnings, games_won, games_lost, 
-                     jackpot_wins, poker_wins, biggest_win,
-                     (SELECT COUNT(*) FROM tournament_history 
-                      WHERE user_id = ? AND place = 1) as tournament_wins
-                     FROM users WHERE user_id = ?''', (user_id, user_id))
-        stats = c.fetchone()
-        
-        if stats:
-            total_winnings, games_won, games_lost, jackpot_wins, poker_wins, biggest_win, tournament_wins = stats
-            
-            # Проверяем прогресс для каждого недостигнутого достижения
-            message += "\n📊 Прогресс достижений:\n"
-            earned_types = {ach[0] for ach in achievements}
-            
-            progress = [
-                ('🎰 Миллионер', total_winnings, 1000000, 'монет накоплено'),
-                ('💎 Крупный выигрыш', biggest_win, 100000, 'монет за раз'),
-                ('🏆 Профессиональный игрок', games_won, 100, 'побед'),
-                ('👑 Легенда казино', total_winnings, 5000000, 'монет накоплено'),
-                ('♠️ Покерный профи', poker_wins, 50, 'побед в покер'),
-                ('💰 Везунчик', jackpot_wins, 3, 'джекпота выиграно'),
-                ('🏅 Турнирный боец', tournament_wins, 5, 'побед в турнирах'),
-                ('🎲 Заядлый игрок', games_won + games_lost, 1000, 'игр сыграно')
-            ]
-            
-            for ach_type, current, required, metric in progress:
-                if ach_type not in earned_types:
-                    percentage = min(100, int(current * 100 / required))
-                    message += f"• {ach_type}: {current}/{required} {metric} ({percentage}%)\n"
+        # Получаем все возможные достижения
+        c.execute('SELECT type, description FROM achievement_types')
+        all_achievements = c.fetchall()
         
         conn.close()
+        
+        if not all_achievements:
+            return "❌ Система достижений временно недоступна"
+        
+        message = "🏆 Ваши достижения:\n\n"
+        
+        if achievements:
+            for achievement in achievements:
+                achievement_type, earned_date, description = achievement
+                earned_date = datetime.strptime(earned_date, '%Y-%m-%d %H:%M:%S.%f')
+                message += f"{achievement_type} - {description}\n"
+                message += f"Получено: {earned_date.strftime('%d.%m.%Y %H:%M')}\n\n"
+        else:
+            message += "У вас пока нет достижений.\n\n"
+        
+        message += "\n📋 Доступные достижения:\n"
+        for achievement in all_achievements:
+            achievement_type, description = achievement
+            if (achievement_type,) not in [(a[0],) for a in achievements]:
+                message += f"{achievement_type} - {description}\n"
+        
         return message
+        
     except Exception as e:
         return f"❌ Ошибка: {str(e)}"
 
